@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026-Present The Zarf Authors
+
+import { describe, expect, it } from 'vitest'
+import { ConfigError, readConfig } from '../src/config.js'
+import { extractSnippets, messageOf, statusOf } from '../src/templates.js'
+
+const reader = (inputs: Record<string, string>) => ({ getInput: (name: string) => inputs[name] ?? '' })
+
+describe('readConfig', () => {
+  it('applies defaults', () => {
+    expect(readConfig(reader({ token: 't' }))).toEqual({
+      token: 't',
+      addLabel: true,
+      label: 'suspicious-hidden-content',
+      labelColor: 'b60205',
+      labelDescription: 'Contains content hidden from human readers',
+      hideComment: true,
+      hideCommentReason: 'SPAM',
+      comment: true,
+      showEvidence: true,
+      removeLabelWhenClean: true,
+      minSeverity: 'medium',
+      ignoreTemplateComments: true,
+      maxBlankLines: 30,
+      maxCommentLength: 200,
+      exemptUsers: [],
+      exemptAuthorAssociations: [],
+      trustedBots: [],
+      failOnDetection: false
+    })
+  })
+
+  it('parses custom values', () => {
+    const config = readConfig(
+      reader({
+        token: 't',
+        'add-label': 'no',
+        'remove-label-when-clean': 'False',
+        label: 'prompt-injection',
+        'label-color': '#00FF00',
+        'min-severity': 'HIGH',
+        'max-blank-lines': '10',
+        'exempt-users': 'Alice, bob',
+        'exempt-author-associations': 'owner,member',
+        'trusted-bots': 'Dependabot[bot]'
+      })
+    )
+    expect(config).toMatchObject({
+      addLabel: false,
+      removeLabelWhenClean: false,
+      label: 'prompt-injection',
+      labelColor: '00ff00',
+      minSeverity: 'high',
+      maxBlankLines: 10,
+      exemptUsers: ['alice', 'bob'],
+      exemptAuthorAssociations: ['OWNER', 'MEMBER'],
+      trustedBots: ['dependabot[bot]']
+    })
+  })
+
+  it('reads lists one item per line, with optional "- " prefixes and commas', () => {
+    const config = readConfig(
+      reader({
+        token: 't',
+        'trusted-bots': '- dependabot[bot]\n',
+        'exempt-users': '- alice\n  - Bob\ncarol, dave\n'
+      })
+    )
+    expect(config.trustedBots).toEqual(['dependabot[bot]'])
+    expect(config.exemptUsers).toEqual(['alice', 'bob', 'carol', 'dave'])
+  })
+
+  it.each([
+    [{}, /token/u],
+    [{ 'add-label': 'maybe' }, /add-label/u],
+    [{ 'min-severity': 'critical' }, /min-severity/u],
+    [{ 'label-color': 'red' }, /label-color/u],
+    [{ label: 'x'.repeat(51) }, /label/u],
+    [{ 'max-blank-lines': '-1' }, /max-blank-lines/u],
+    [{ 'exempt-author-associations': 'ADMIN' }, /ADMIN/u],
+    [{ 'hide-comment-reason': 'rude' }, /hide-comment-reason/u],
+    [{ 'trusted-bots': 'evil[bot]' }, /trusted-bots.*dependabot\[bot\]/u]
+  ])('rejects invalid input %j', (inputs, message) => {
+    const token = 'token' in inputs || Object.keys(inputs).length === 0 ? {} : { token: 't' }
+    expect(() => readConfig(reader({ ...token, ...inputs }))).toThrow(ConfigError)
+    expect(() => readConfig(reader({ ...token, ...inputs }))).toThrow(message)
+  })
+})
+
+describe('template helpers', () => {
+  it('extracts normalized comment snippets', () => {
+    expect(
+      extractSnippets('<!-- Describe\n  the bug -->\n[//]: # (Internal note)\n```\n<!-- in code -->\n```')
+    ).toEqual(['describe the bug', 'internal note'])
+  })
+
+  it('reads HTTP status and messages from errors', () => {
+    expect(statusOf({ status: 404 })).toBe(404)
+    expect(statusOf(new Error('x'))).toBeUndefined()
+    expect(statusOf(null)).toBeUndefined()
+    expect(messageOf(new Error('boom'))).toBe('boom')
+    expect(messageOf('plain')).toBe('plain')
+  })
+})

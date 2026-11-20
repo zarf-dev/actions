@@ -13,3 +13,14 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+  - package-ecosystem: npm
+    directory: "/invisible-ai-injection-guard"
+    groups:
+      production-dependencies:
+        dependency-type: production
+      development-dependencies:
+        dependency-type: development
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

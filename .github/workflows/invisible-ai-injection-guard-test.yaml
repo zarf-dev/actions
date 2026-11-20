@@ -1,0 +1,69 @@
+name: Invisible AI Injection Guard Test
+on:
+  pull_request:
+    paths:
+      - "invisible-ai-injection-guard/**"
+      - ".github/workflows/invisible-ai-injection-guard-test.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "invisible-ai-injection-guard/**"
+      - ".github/workflows/invisible-ai-injection-guard-test.yaml"
+
+permissions: {}
+
+jobs:
+  invisible-ai-injection-guard-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: invisible-ai-injection-guard
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: invisible-ai-injection-guard/.nvmrc
+          cache: npm
+          cache-dependency-path: invisible-ai-injection-guard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run unit tests with coverage
+        run: npm run coverage
+
+      - name: Run end-to-end tests (builds dist/ and runs it against e2e/cases)
+        run: npm run test:e2e
+
+      - name: Check dist/ is up to date
+        run: |
+          if [ -n "$(git status --porcelain dist)" ]; then
+            echo "::error::dist/ is out of date. Run 'npm run build' in this directory and commit the result."
+            git diff --stat dist
+            exit 1
+          fi
+
+      - name: Check sources contain no invisible characters
+        run: |
+          if grep -rnP '[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2069}\x{FEFF}\x{E0000}-\x{E007F}]' \
+            src __tests__ e2e action.yaml README.md; then
+            echo "::error::Invisible or bidirectional characters found in sources; use code point escapes instead."
+            exit 1
+          fi

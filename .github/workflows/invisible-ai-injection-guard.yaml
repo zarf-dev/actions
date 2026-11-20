@@ -1,0 +1,72 @@
+name: Invisible AI Injection Guard
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  # pull_request_target runs the workflow and the action from the base branch, so a PR cannot change the check.
+  # This is safe because no job checks out or executes PR code.
+  pull_request_target:
+    types: [opened, edited, reopened]
+  issue_comment:
+    types: [created, edited]
+  # Review events on PRs from forks get a read-only token: findings are reported in the run but not acted on.
+  pull_request_review_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
+
+permissions: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    outputs:
+      detected: ${{ steps.guard.outputs.detected }}
+    steps:
+      # Checks out the default branch explicitly: review events would otherwise check out the PR merge commit.
+      - name: Checkout action from default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: invisible-ai-injection-guard
+
+      - name: Scan for hidden content
+        id: guard
+        uses: ./invisible-ai-injection-guard
+        with:
+          trusted-bots: |
+            - dependabot[bot]
+
+  # Labels added with GITHUB_TOKEN do not trigger "labeled" events, so closing runs here rather than in
+  # close-on-labels.yaml. Only flagged descriptions close the item: otherwise anyone who can comment could close it.
+  close:
+    needs: scan
+    if: >-
+      needs.scan.outputs.detected == 'true' &&
+      (github.event_name == 'issues' || github.event_name == 'pull_request_target')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout action from default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: close-on-labels
+
+      - name: Close flagged item
+        uses: ./close-on-labels
+        with:
+          or: suspicious-hidden-content
+          number: ${{ github.event.issue.number || github.event.pull_request.number }}
+          comment: "Closing because this was labeled {{matched}}."
