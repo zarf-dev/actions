@@ -1,0 +1,76 @@
+name: close-on-labels
+description: "Closes an issue or pull request when its labels match an ordered list of rules"
+
+inputs:
+  rules-file:
+    description: "Path to a YAML file with an ordered list of rules."
+    required: true
+  target:
+    description: "What a rule may act on: `issues`, `prs` or `all`. Default for rules that do not set their own."
+    required: false
+    default: "all"
+  comment:
+    description: >-
+      Comment posted before closing. `{{matched}}` and `{{rule}}` are replaced. Empty means no comment.
+      Default for rules that do not set their own.
+    required: false
+    default: ""
+  close-reason:
+    description: "Close reason for issues: `completed` or `not_planned`. Ignored for pull requests."
+    required: false
+    default: "not_planned"
+  lock:
+    description: "Lock the conversation after closing."
+    required: false
+    default: "false"
+  dry-run:
+    description: "Log the result without commenting, closing or locking."
+    required: false
+    default: "false"
+  number:
+    description: "Issue or pull request number. Defaults to the one in the triggering event."
+    required: false
+    default: ""
+  token:
+    description: "Token used to read and close the item; needs issues and pull-requests write access"
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  closed:
+    description: "`true` if this run closed the item, otherwise `false`."
+    value: ${{ steps.close.outputs.closed }}
+  result:
+    description: "`closed`, `kept` (a rule with only `not-labels` applied), `would-close` (dry-run) or `none`."
+    value: ${{ steps.close.outputs.result }}
+  matched-rule:
+    description: "ID of the rule that applied, or empty."
+    value: ${{ steps.close.outputs.matched-rule }}
+  matched-labels:
+    description: "Comma separated labels that made the rule apply, or empty."
+    value: ${{ steps.close.outputs.matched-labels }}
+  number:
+    description: "The issue or pull request number that was checked."
+    value: ${{ steps.close.outputs.number }}
+
+runs:
+  using: composite
+  steps:
+    - id: close
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        SHA: ${{ github.sha }}
+        WORKSPACE: ${{ github.workspace }}
+        EVENT_NAME: ${{ github.event_name }}
+        EVENT_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        INPUT_RULES_FILE: ${{ inputs.rules-file }}
+        INPUT_TARGET: ${{ inputs.target }}
+        INPUT_COMMENT: ${{ inputs.comment }}
+        INPUT_CLOSE_REASON: ${{ inputs.close-reason }}
+        INPUT_LOCK: ${{ inputs.lock }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+        INPUT_NUMBER: ${{ inputs.number }}
+      run: |
+        bash "$GITHUB_ACTION_PATH/close.sh"

@@ -1,0 +1,7 @@
+# Rules for .github/workflows/close-on-labels.yaml. See close-on-labels/README.md.
+rules: # checked in order, the first rule that applies decides
+  - id: keep
+    not-labels: [keep-open]
+  - id: rejected
+    any-labels: [wontfix, invalid, duplicate]
+    comment: "Closing because this was labeled {{matched}}."

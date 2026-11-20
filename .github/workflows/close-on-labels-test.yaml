@@ -1,0 +1,33 @@
+name: Close On Labels Test
+on:
+  pull_request:
+    paths:
+      - "close-on-labels/**"
+      - ".github/workflows/close-on-labels-test.yaml"
+      - ".github/close-rules.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "close-on-labels/**"
+      - ".github/workflows/close-on-labels-test.yaml"
+      - ".github/close-rules.yaml"
+
+permissions: {}
+
+jobs:
+  close-on-labels-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint scripts
+        run: shellcheck close-on-labels/close.sh close-on-labels/close_test.sh
+
+      - name: Run action tests
+        run: bash close-on-labels/close_test.sh

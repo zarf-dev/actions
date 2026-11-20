@@ -1,0 +1,39 @@
+name: Close On Labels
+
+on:
+  issues:
+    types: [labeled]
+  # pull_request_target runs the workflow, the action and the rules from the base branch, so a PR cannot change them.
+  # This is safe because the job never checks out or executes PR code.
+  pull_request_target:
+    types: [labeled]
+
+permissions: {}
+
+concurrency:
+  group: close-on-labels-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  close-on-labels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      # No ref is set on purpose: under pull_request_target this checks out the base branch, never the PR head.
+      - name: Checkout action and rules from base branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            close-on-labels/
+            .github/close-rules.yaml
+
+      - name: Close on labels
+        uses: ./close-on-labels
+        with:
+          rules-file: .github/close-rules.yaml
